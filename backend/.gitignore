@@ -20,3 +20,17 @@ data/
 venv/
 node_modules/
 .env
+venv/
+__pycache__/
+node_modules/
+.env
+*.db
+qdrant_db/
+chroma_db/
+dist/
+build/
+backend/qdrant_db/
+qdrant_db/
+*.db
+.env
+.env.*
