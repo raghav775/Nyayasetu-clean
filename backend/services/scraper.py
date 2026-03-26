@@ -34,10 +34,18 @@ def scrape_indian_kanoon(query: str, max_results: int = 5) -> list:
             href = a_tag.get("href", "")
             link = BASE_URL + href if href.startswith("/") else href
 
+            # Try to grab snippet from the sibling result text div
+            snippet = ""
+            result_block = div.find_parent("div")
+            if result_block:
+                snippet_div = result_block.find("div", class_="result_text")
+                if snippet_div:
+                    snippet = snippet_div.get_text(separator=" ", strip=True)[:300]
+
             results.append({
                 "title": title,
                 "link": link,
-                "snippet": "",
+                "snippet": snippet,
                 "source": "Indian Kanoon"
             })
 
@@ -45,4 +53,3 @@ def scrape_indian_kanoon(query: str, max_results: int = 5) -> list:
         print(f"[Scraper] Error fetching Indian Kanoon: {e}")
 
     return results
-    print("SCRAPED KANOON:", results)

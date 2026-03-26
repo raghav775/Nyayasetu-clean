@@ -113,8 +113,8 @@ def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -
         print("[RAG] Empty collection. Run ingest.py first.")
         return []
 
-    # 🔥 expand query
-    expanded_query = f"{query} Indian law IPC legal case Dowry Prohibition Act 498A"
+    # Expand query with general Indian law context only
+    expanded_query = f"{query} Indian law legal case judgment"
 
     query_embedding = embedding_model.encode([expanded_query]).tolist()[0]
 

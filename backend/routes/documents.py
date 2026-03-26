@@ -25,11 +25,9 @@ def generate_draft(
         raise HTTPException(status_code=400, detail="Description cannot be empty")
 
     search_query = f"{req.category} {req.description}" if req.category else req.description
-    results = search_drafts(
-        search_query,
-        n_results=req.n_results,
-        category_filter=req.category
-    )
+
+    # Always search WITHOUT category filter — category names may not match folder names
+    results = search_drafts(search_query, n_results=req.n_results)
 
     if not results:
         results = search_drafts(req.description, n_results=req.n_results)
