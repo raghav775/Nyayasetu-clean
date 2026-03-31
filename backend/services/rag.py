@@ -9,24 +9,47 @@ from qdrant_client.models import (
 from utils.document_loader import load_all_documents
 
 QDRANT_PATH = os.getenv("CHROMA_DB_PATH", "./qdrant_db")
-DATA_PATH = os.path.join(os.getcwd(), "data/drafts")
+DRAFTS_DATA_PATH = os.getenv("DRAFTS_DATA_PATH", "../data/drafts")
 COLLECTION_NAME = "nyayasetu_legal_docs"
 VECTOR_SIZE = 384
 
-print("[RAG] Loading embedding model (all-MiniLM-L6-v2)...")
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-print("[RAG] Embedding model ready.")
+# Lazy loaded — not at startup
+_embedding_model = None
+_qdrant_client = None
 
-qdrant = QdrantClient(path=QDRANT_PATH)
+
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        print("[RAG] Loading embedding model (all-MiniLM-L6-v2)...")
+        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        print("[RAG] Embedding model ready.")
+    return _embedding_model
+
+
+def get_qdrant():
+    global _qdrant_client
+    if _qdrant_client is None:
+        _qdrant_client = QdrantClient(path=QDRANT_PATH)
+    return _qdrant_client
 
 
 def ensure_collection():
-    existing = [c.name for c in qdrant.get_collections().collections]
+    client = get_qdrant()
+    existing = [c.name for c in client.get_collections().collections]
     if COLLECTION_NAME not in existing:
-        qdrant.create_collection(
+        client.create_collection(
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
+
+
+def get_collection_count() -> int:
+    try:
+        ensure_collection()
+        return get_qdrant().count(collection_name=COLLECTION_NAME).count
+    except Exception:
+        return 0
 
 
 def chunk_text(text: str, chunk_size: int = 600, overlap: int = 80) -> list:
@@ -41,30 +64,19 @@ def chunk_text(text: str, chunk_size: int = 600, overlap: int = 80) -> list:
     return chunks
 
 
-def get_collection_count() -> int:
-    try:
-        ensure_collection()
-        return qdrant.count(collection_name=COLLECTION_NAME).count
-    except Exception:
-        return 0
-
-
 def ingest_documents():
     ensure_collection()
 
     if get_collection_count() > 0:
-        print(f"[RAG] {get_collection_count()} chunks already stored. Skipping ingestion.")
-        print("[RAG] To re-ingest, delete the qdrant_db folder and run again.")
+        print(f"[RAG] {get_collection_count()} chunks already stored. Skipping.")
         return
 
-    documents = load_all_documents(DATA_PATH)
+    documents = load_all_documents(DRAFTS_DATA_PATH)
     if not documents:
         print("[RAG] No documents found. Add RTF/DOCX files to data/drafts/")
         return
 
-    all_ids = []
-    all_texts = []
-    all_metadatas = []
+    all_ids, all_texts, all_metadatas = [], [], []
 
     for doc in documents:
         for i, chunk in enumerate(chunk_text(doc["text"])):
@@ -76,32 +88,31 @@ def ingest_documents():
                 "chunk_index": i,
             })
 
+    model = get_embedding_model()
     print(f"[RAG] Generating embeddings for {len(all_texts)} chunks...")
-    batch_size = 64
     all_embeddings = []
+    batch_size = 64
 
     for i in range(0, len(all_texts), batch_size):
         batch = all_texts[i:i + batch_size]
-        embeddings = embedding_model.encode(batch, show_progress_bar=False).tolist()
+        embeddings = model.encode(batch, show_progress_bar=False).tolist()
         all_embeddings.extend(embeddings)
-        done = min(i + batch_size, len(all_texts))
-        print(f"[RAG] Embedded {done}/{len(all_texts)}", end="\r")
+        print(f"[RAG] Embedded {min(i + batch_size, len(all_texts))}/{len(all_texts)}", end="\r")
 
     print(f"\n[RAG] Storing {len(all_texts)} chunks in Qdrant...")
+    client = get_qdrant()
     store_batch = 256
+
     for i in range(0, len(all_texts), store_batch):
         points = [
             PointStruct(
                 id=all_ids[i + j],
                 vector=all_embeddings[i + j],
-                payload={
-                    "text": all_texts[i + j],
-                    **all_metadatas[i + j]
-                }
+                payload={"text": all_texts[i + j], **all_metadatas[i + j]}
             )
             for j in range(min(store_batch, len(all_texts) - i))
         ]
-        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+        client.upsert(collection_name=COLLECTION_NAME, points=points)
 
     print(f"[RAG] Done. {get_collection_count()} chunks stored.")
 
@@ -113,10 +124,8 @@ def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -
         print("[RAG] Empty collection. Run ingest.py first.")
         return []
 
-    # Expand query with general Indian law context only
-    expanded_query = f"{query} Indian law legal case judgment"
-
-    query_embedding = embedding_model.encode([expanded_query]).tolist()[0]
+    model = get_embedding_model()
+    query_embedding = model.encode([query]).tolist()[0]
 
     query_filter = None
     if category_filter:
@@ -124,16 +133,18 @@ def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -
             must=[FieldCondition(key="category", match=MatchValue(value=category_filter))]
         )
 
-    results = qdrant.search(
+    results = get_qdrant().search(
         collection_name=COLLECTION_NAME,
         query_vector=query_embedding,
-        limit=10,
+        limit=n_results,
         query_filter=query_filter,
         with_payload=True,
     )
 
     output = []
     for r in results:
+        if r.score < 0.15:
+            continue
         output.append({
             "text": r.payload.get("text", ""),
             "metadata": {
@@ -143,7 +154,5 @@ def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -
             },
             "score": r.score,
         })
-
-    print("RAW SCORES:", [r.score for r in results])
 
     return output
