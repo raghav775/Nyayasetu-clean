@@ -15,7 +15,8 @@ def call_groq(system_prompt: str, user_message: str) -> str:
             {"role": "user", "content": user_message},
         ],
         temperature=0.2,
-        max_tokens=2500,
+        max_tokens=1000,
+        timeout=30,
     )
     return response.choices[0].message.content.strip()
 
