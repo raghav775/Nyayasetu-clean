@@ -37,3 +37,40 @@ apscheduler==3.10.4
 
 # Utilities
 tqdm==4.66.4
+argon2-cffi==23.1.0
+fastapi==0.111.0
+uvicorn==0.30.1
+python-dotenv==1.0.1
+pydantic[email]==2.7.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+argon2-cffi==23.1.0
+
+# Database
+sqlalchemy==2.0.30
+
+# Encryption AES-256
+cryptography==42.0.8
+
+# LLM
+groq==0.9.0
+
+# Embeddings + Vector DB
+sentence-transformers==2.6.1
+qdrant-client==1.9.1
+numpy
+
+# Document parsing
+striprtf==0.0.26
+python-docx==1.1.2
+pypdf==4.2.0
+
+# Scraping
+httpx==0.27.0
+beautifulsoup4==4.12.3
+
+# Utilities
+tqdm==4.66.4
