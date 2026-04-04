@@ -34,7 +34,7 @@ No hallucinations. No guesswork. Every answer is grounded in real legal data.
 - **LLM (Online)** — Groq API (Llama 3.3 70B) — free tier
 - **LLM (Offline)** — Ollama (Llama 3.2)
 - **Embeddings** — sentence-transformers (local, free)
-- **Vector DB** — ChromaDB (local, free)
+- **Vector DB** — Qdrant (local, embedded)
 - **Case Data** — Indian Kanoon (live search + Hugging Face dataset)
 - **Frontend** — React
 
