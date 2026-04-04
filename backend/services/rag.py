@@ -1,30 +1,19 @@
 import os
 import uuid
-from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, VectorParams, PointStruct, Filter,
     FieldCondition, MatchValue
 )
+from groq import Groq
 from utils.document_loader import load_all_documents
 
 QDRANT_PATH = os.getenv("QDRANT_PATH", "./qdrant_db")
 DRAFTS_DATA_PATH = os.getenv("DRAFTS_DATA_PATH", "../data/drafts")
 COLLECTION_NAME = "nyayasetu_legal_docs"
-VECTOR_SIZE = 384
+VECTOR_SIZE = 1536
 
-# Lazy loaded — not at startup
-_embedding_model = None
 _qdrant_client = None
-
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        print("[RAG] Loading embedding model (all-MiniLM-L6-v2)...")
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-        print("[RAG] Embedding model ready.")
-    return _embedding_model
 
 
 def get_qdrant():
@@ -32,6 +21,19 @@ def get_qdrant():
     if _qdrant_client is None:
         _qdrant_client = QdrantClient(path=QDRANT_PATH)
     return _qdrant_client
+
+
+def get_embeddings(texts: list) -> list:
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    result = []
+    # Groq embeddings API processes one at a time
+    for text in texts:
+        response = client.embeddings.create(
+            model="nomic-embed-text-v1_5",
+            input=text
+        )
+        result.append(response.data[0].embedding)
+    return result
 
 
 def ensure_collection():
@@ -73,7 +75,7 @@ def ingest_documents():
 
     documents = load_all_documents(DRAFTS_DATA_PATH)
     if not documents:
-        print("[RAG] No documents found. Add RTF/DOCX files to data/drafts/")
+        print("[RAG] No documents found.")
         return
 
     all_ids, all_texts, all_metadatas = [], [], []
@@ -88,18 +90,10 @@ def ingest_documents():
                 "chunk_index": i,
             })
 
-    model = get_embedding_model()
-    print(f"[RAG] Generating embeddings for {len(all_texts)} chunks...")
-    all_embeddings = []
-    batch_size = 64
+    print(f"[RAG] Generating embeddings for {len(all_texts)} chunks via Groq...")
+    all_embeddings = get_embeddings(all_texts)
 
-    for i in range(0, len(all_texts), batch_size):
-        batch = all_texts[i:i + batch_size]
-        embeddings = model.encode(batch, show_progress_bar=False).tolist()
-        all_embeddings.extend(embeddings)
-        print(f"[RAG] Embedded {min(i + batch_size, len(all_texts))}/{len(all_texts)}", end="\r")
-
-    print(f"\n[RAG] Storing {len(all_texts)} chunks in Qdrant...")
+    print(f"[RAG] Storing {len(all_texts)} chunks in Qdrant...")
     client = get_qdrant()
     store_batch = 256
 
@@ -121,11 +115,9 @@ def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -
     ensure_collection()
 
     if get_collection_count() == 0:
-        print("[RAG] Empty collection. Run ingest.py first.")
         return []
 
-    model = get_embedding_model()
-    query_embedding = model.encode([query]).tolist()[0]
+    query_embedding = get_embeddings([query])[0]
 
     query_filter = None
     if category_filter:
