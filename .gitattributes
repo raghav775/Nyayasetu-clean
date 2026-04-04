@@ -1,0 +1,5 @@
+frontend/package-lock.json linguist-generated=true
+frontend/package-lock.json linguist-detectable=false
+*.jsx linguist-language=JavaScript
+*.js linguist-language=JavaScript
+backend/*.py linguist-language=Python
