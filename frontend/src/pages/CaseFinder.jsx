@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import {
-    Search, BookOpen, Gavel, Calendar, FileText,
-    ChevronRight, X, Sparkles, TrendingUp, AlertCircle,
-    ChevronDown, ExternalLink
+    Search, BookOpen, Gavel, Sparkles, TrendingUp, AlertCircle,
+    ChevronDown, ExternalLink, Tag
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './CaseFinder.css';
@@ -21,12 +20,12 @@ const CaseFinder = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
-    const [selectedCase, setSelectedCase] = useState(null);
     const [error, setError] = useState('');
 
     const [aiAnswer, setAiAnswer] = useState('');
     const [localSources, setLocalSources] = useState([]);
     const [liveCases, setLiveCases] = useState([]);
+    const [judgementKeywords, setJudgementKeywords] = useState([]);
 
     const [activeCourt, setActiveCourt] = useState('All Courts');
     const [activeYear, setActiveYear] = useState('All Years');
@@ -52,6 +51,7 @@ const CaseFinder = () => {
         setAiAnswer('');
         setLocalSources([]);
         setLiveCases([]);
+        setJudgementKeywords([]);
 
         try {
             const response = await fetch('/api/cases/search', {
@@ -69,6 +69,14 @@ const CaseFinder = () => {
             setAiAnswer(data.answer);
             setLocalSources(data.sources || []);
             setLiveCases(data.live_cases || []);
+
+            // Extract all unique keywords from all live case judgements
+            const allKeywords = [
+                ...new Set(
+                    (data.live_cases || []).flatMap(c => c.keywords || [])
+                )
+            ];
+            setJudgementKeywords(allKeywords);
             setHasSearched(true);
         } catch (err) {
             setError(err.message);
@@ -123,9 +131,46 @@ const CaseFinder = () => {
                         <label className="checkbox-item"><input type="checkbox" /> <span>Family</span></label>
                     </div>
                 </div>
+
+                {/* Keywords from Judgements Panel */}
+                {judgementKeywords.length > 0 && (
+                    <div className="filter-group" style={{ marginTop: '1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                            <Tag size={13} style={{ color: 'var(--primary, #2d7dd2)' }} />
+                            <label style={{ margin: 0 }}>Keywords from Judgements</label>
+                        </div>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted, #8BA5BE)', marginBottom: '0.75rem', lineHeight: '1.5' }}>
+                            Click any keyword to search cases containing it
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {judgementKeywords.slice(0, 20).map((kw, i) => (
+                                <span
+                                    key={i}
+                                    onClick={() => triggerSearch(kw)}
+                                    style={{
+                                        cursor: 'pointer',
+                                        fontSize: '0.68rem',
+                                        padding: '0.2rem 0.55rem',
+                                        background: 'rgba(45,125,210,0.12)',
+                                        color: '#93c5fd',
+                                        borderRadius: '4px',
+                                        border: '1px solid rgba(45,125,210,0.3)',
+                                        transition: 'all 0.15s',
+                                        userSelect: 'none',
+                                    }}
+                                    onMouseEnter={e => e.target.style.background = 'rgba(45,125,210,0.25)'}
+                                    onMouseLeave={e => e.target.style.background = 'rgba(45,125,210,0.12)'}
+                                    title={`Search: "${kw}"`}
+                                >
+                                    {kw}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </aside>
 
-            <main className={`results-feed ${selectedCase ? 'panel-open' : ''}`}>
+            <main className="results-feed">
                 <div className="search-header-panel">
                     <form className="advanced-search-bar" onSubmit={handleSearch}>
                         <div className="search-input-area">
@@ -196,8 +241,8 @@ const CaseFinder = () => {
                                         {liveCases.map((c, i) => (
                                             <div key={i} className="case-card glass-panel">
                                                 <div className="case-card-header">
-                                                    <h3>{c.title}</h3>\n                                                    <a
-                                                    
+                                                    <h3>{c.title}</h3>
+                                                    <a
                                                         href={c.link}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
@@ -214,6 +259,30 @@ const CaseFinder = () => {
                                                     <div className="snippet-marker"></div>
                                                     <p>{c.snippet}</p>
                                                 </div>
+                                                {/* Keywords from this specific judgement */}
+                                                {c.keywords && c.keywords.length > 0 && (
+                                                    <div style={{ marginTop: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
+                                                        <Tag size={11} style={{ color: '#6b7280' }} />
+                                                        {c.keywords.map((kw, ki) => (
+                                                            <span
+                                                                key={ki}
+                                                                onClick={() => triggerSearch(kw)}
+                                                                style={{
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '0.65rem',
+                                                                    padding: '0.15rem 0.5rem',
+                                                                    background: 'rgba(45,125,210,0.1)',
+                                                                    color: '#93c5fd',
+                                                                    borderRadius: '3px',
+                                                                    border: '1px solid rgba(45,125,210,0.25)',
+                                                                }}
+                                                                title={`Search: "${kw}"`}
+                                                            >
+                                                                {kw}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -247,7 +316,7 @@ const CaseFinder = () => {
                         <div className="empty-search-state animate-fade-in">
                             <BookOpen size={48} className="empty-icon" />
                             <h2>Intelligent Case Finder</h2>
-                            <p>Enter a query to search real Indian court judgments from Indian Kanoon and your legal database. Zero hallucinations — only real cases.</p>
+                            <p>Enter a query to search real Indian court judgments from Indian Kanoon. Keywords extracted directly from judgement text appear in the sidebar — click any to drill deeper.</p>
                         </div>
                     )}
                 </div>

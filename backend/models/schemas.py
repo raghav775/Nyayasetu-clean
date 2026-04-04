@@ -166,6 +166,7 @@ class LiveCase(BaseModel):
     link: str
     snippet: str
     source: str
+    keywords: List[str] = []
 
 
 class CaseSearchRequest(BaseModel):
@@ -178,6 +179,11 @@ class CaseSearchResponse(BaseModel):
     answer: str
     sources: List[SearchSource]
     live_cases: List[LiveCase]
+
+
+class KeywordSearchRequest(BaseModel):
+    keyword: str
+    n_results: Optional[int] = 5
 
 
 # ─── Legal Aid ────────────────────────────────────────
