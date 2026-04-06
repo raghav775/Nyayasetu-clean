@@ -11,29 +11,38 @@ from utils.document_loader import load_all_documents
 QDRANT_PATH = os.getenv("QDRANT_PATH", "./qdrant_db")
 DRAFTS_DATA_PATH = os.getenv("DRAFTS_DATA_PATH", "../data/drafts")
 COLLECTION_NAME = "nyayasetu_legal_docs"
-VECTOR_SIZE = 1536
+VECTOR_SIZE = 384
 
 _qdrant_client = None
-
+_embedding_model = None
 
 def get_qdrant():
     global _qdrant_client
     if _qdrant_client is None:
-        _qdrant_client = QdrantClient(path=QDRANT_PATH)
+        qdrant_url = os.getenv("QDRANT_URL")
+        qdrant_api_key = os.getenv("QDRANT_API_KEY")
+        
+        if qdrant_url and qdrant_api_key:
+            _qdrant_client = QdrantClient(
+            url=qdrant_url,
+            api_key=qdrant_api_key,
+            timeout=60  # add this line
+            )
+        else:
+            # Local mode — development
+            _qdrant_client = QdrantClient(path=QDRANT_PATH)
     return _qdrant_client
 
 
 def get_embeddings(texts: list) -> list:
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    result = []
-    # Groq embeddings API processes one at a time
-    for text in texts:
-        response = client.embeddings.create(
-            model="nomic-embed-text-v1_5",
-            input=text
-        )
-        result.append(response.data[0].embedding)
-    return result
+    from fastembed import TextEmbedding
+    global _embedding_model
+    if _embedding_model is None:
+        print("[RAG] Loading fastembed model...")
+        _embedding_model = TextEmbedding("BAAI/bge-small-en-v1.5")
+        print("[RAG] Model ready.")
+    embeddings = list(_embedding_model.embed(texts))
+    return [e.tolist() for e in embeddings]
 
 
 def ensure_collection():
@@ -90,12 +99,12 @@ def ingest_documents():
                 "chunk_index": i,
             })
 
-    print(f"[RAG] Generating embeddings for {len(all_texts)} chunks via Groq...")
+    print(f"[RAG] Generating embeddings for {len(all_texts)} chunks...")
     all_embeddings = get_embeddings(all_texts)
 
     print(f"[RAG] Storing {len(all_texts)} chunks in Qdrant...")
     client = get_qdrant()
-    store_batch = 256
+    store_batch = 50
 
     for i in range(0, len(all_texts), store_batch):
         points = [
@@ -106,10 +115,20 @@ def ingest_documents():
             )
             for j in range(min(store_batch, len(all_texts) - i))
         ]
-        client.upsert(collection_name=COLLECTION_NAME, points=points)
+        for attempt in range(3):
+            try:
+                client.upsert(collection_name=COLLECTION_NAME, points=points)
+                print(f"[RAG] Stored {min(i + store_batch, len(all_texts))}/{len(all_texts)}", end="\r")
+                break
+            except Exception as e:
+                if attempt == 2:
+                    print(f"\n[RAG] Failed batch {i} after 3 attempts: {e}")
+                else:
+                    print(f"\n[RAG] Retry {attempt + 1} for batch {i}...")
+                    import time
+                    time.sleep(5)
 
-    print(f"[RAG] Done. {get_collection_count()} chunks stored.")
-
+    print(f"\n[RAG] Done. {get_collection_count()} chunks stored.")
 
 def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -> list:
     ensure_collection()

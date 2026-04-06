@@ -59,7 +59,7 @@ cryptography==42.0.8
 groq==0.9.0
 
 # Embeddings + Vector DB
-
+fastembed==0.3.6
 qdrant-client==1.9.1
 numpy
 
