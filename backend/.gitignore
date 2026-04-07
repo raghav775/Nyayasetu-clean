@@ -5,7 +5,6 @@ __pycache__/
 chroma_db/
 *.db
 .env
-data/
 *.egg-info/
 dist/
 build/
@@ -16,7 +15,7 @@ nyayasetu.db
 backend/qdrant_db/
 chroma_db/
 nyayasetu.db
-data/
+
 venv/
 node_modules/
 .env
@@ -42,7 +41,7 @@ __pycache__/
 .env
 qdrant_db/
 chroma_db/
-data/
+
 node_modules/
 frontend/dist/
 *.egg-info/

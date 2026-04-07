@@ -87,6 +87,7 @@ Provide a structured legal research response. Only cite cases present in the abo
             link=r["link"],
             snippet=r["snippet"],
             source=r["source"],
+            keywords=r.get("keywords", []),  # ← THIS WAS MISSING
         )
         for r in live_results
     ]
