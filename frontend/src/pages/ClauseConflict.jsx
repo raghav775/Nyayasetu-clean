@@ -31,14 +31,50 @@ const ClauseConflict = () => {
         setParties(parties.map(p => p.id === id ? { ...p, name: newName } : p));
     };
 
-    const readFileAsText = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = reject;
-            reader.readAsText(file, 'utf-8');
-        });
-    };
+    const readFileAsText = async (file) => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        
+        if (ext === 'txt') {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file, 'utf-8');
+            });
+        }
+    
+        if (ext === 'pdf') {
+            const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.mjs');
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.mjs';
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                fullText += content.items.map(item => item.str).join(' ') + '\n';
+            }
+            return fullText;
+        }
+    
+        if (ext === 'doc' || ext === 'docx') {
+            // Load mammoth as a script tag so it attaches to window.mammoth globally
+            await new Promise((resolve, reject) => {
+                if (window.mammoth) return resolve();  // already loaded
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await window.mammoth.extractRawText({ arrayBuffer });
+            return result.value;
+        }
+    
+        throw new Error(`Unsupported file type: .${ext}`);
+};  
 
     const handleFileUpload = async (e, partyId) => {
         const uploadedFiles = Array.from(e.target.files);
@@ -161,14 +197,14 @@ const ClauseConflict = () => {
                                         <input
                                             type="file"
                                             multiple
-                                            accept=".txt"
+                                            accept=".txt,.pdf,.doc,.docx"
                                             className="hidden-file-input"
                                             ref={(el) => fileInputRefs.current[party.id] = el}
                                             onChange={(e) => handleFileUpload(e, party.id)}
                                         />
                                         <UploadCloud size={32} className="upload-icon-faded" />
-                                        <p>Click to upload a TXT file</p>
-                                        <span className="upload-subtext">Plain text files only (.txt)</span>
+                                        <p>Click to upload a contract file</p>
+                                        <span className="upload-subtext">Supported: TXT, PDF, DOC, DOCX</span>
                                     </div>
 
                                     <div className="paste-divider">
