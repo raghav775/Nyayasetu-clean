@@ -93,7 +93,7 @@ ollama pull llama3.2
 # Ollama runs automatically as fallback when Groq is unavailable
 ```
 
----
+--
 
 ## Environment Variables
 
