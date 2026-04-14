@@ -1,4 +1,3 @@
-
 # NyayaSetu — न्यायसेतु
 
 **Bridge to Justice** | AI-powered legal assistant for advocates and legal interns
