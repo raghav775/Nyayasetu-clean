@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import ProtectedRoute from './components/ProtectedRoute';
+import ServerWakeup from './components/ServerWakeup';
 
 import Home from './pages/Home';
 import CaseFinder from './pages/CaseFinder';
@@ -25,6 +26,8 @@ const AppShell = () => (
 
 const App = () => {
   return (
+    <>
+    <ServerWakeup />
     <Routes>
       {/* Public */}
       <Route path="/login" element={<Login />} />
@@ -38,6 +41,7 @@ const App = () => {
         <Route path="legal-aid" element={<ProtectedRoute><LegalAid /></ProtectedRoute>} />
       </Route>
     </Routes>
+    </>
   );
 };
 

@@ -8,7 +8,43 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('jwt_token') || null);
     const [loading, setLoading] = useState(true);
+    const [serverStatus, setServerStatus] = useState('checking'); // 'checking' | 'waking' | 'online'
     const navigate = useNavigate();
+
+    // Keep the Render.com backend alive — ping /health every 10 minutes to
+    // prevent the free-tier 15-minute inactivity sleep. Also detect initial
+    // wake-up so we can show a banner instead of silent failures.
+    useEffect(() => {
+        let retryTimeout = null;
+        let mounted = true;
+        let attempt = 0;
+
+        const pingHealth = async () => {
+            try {
+                const res = await fetch('/api/health');
+                if (res.ok && mounted) {
+                    setServerStatus('online');
+                }
+            } catch {
+                if (!mounted) return;
+                attempt += 1;
+                if (attempt >= 2) setServerStatus('waking');
+                retryTimeout = setTimeout(pingHealth, 5000);
+            }
+        };
+
+        pingHealth();
+
+        const keepAlive = setInterval(() => {
+            fetch('/api/health').catch(() => {});
+        }, 10 * 60 * 1000);
+
+        return () => {
+            mounted = false;
+            clearTimeout(retryTimeout);
+            clearInterval(keepAlive);
+        };
+    }, []);
 
     useEffect(() => {
         const verifySession = async () => {
@@ -114,7 +150,7 @@ export const AuthProvider = ({ children }) => {
     return (
         <AuthContext.Provider value={{
             user, token, isAuthenticated: !!token,
-            login, register, logout, loading, getAuthHeaders
+            login, register, logout, loading, getAuthHeaders, serverStatus
         }}>
             {children}
         </AuthContext.Provider>
