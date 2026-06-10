@@ -12,3 +12,5 @@ services:
         sync: false
       - key: ENCRYPTION_KEY
         sync: false
+      - key: INDIAN_KANOON_TOKEN
+        sync: false

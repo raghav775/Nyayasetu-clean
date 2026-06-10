@@ -21,10 +21,12 @@ export const AuthProvider = ({ children }) => {
 
         const pingHealth = async () => {
             try {
-                const res = await fetch('/api/health');
-                if (res.ok && mounted) {
-                    setServerStatus('online');
-                }
+                const controller = new AbortController();
+                const tid = setTimeout(() => controller.abort(), 8000);
+                await fetch('/api/health', { signal: controller.signal });
+                clearTimeout(tid);
+                // Any HTTP response (even 5xx) means the server is reachable
+                if (mounted) setServerStatus('online');
             } catch {
                 if (!mounted) return;
                 attempt += 1;
@@ -64,12 +66,16 @@ export const AuthProvider = ({ children }) => {
                         email: data.email,
                         plan: data.role,
                     });
-                } else {
+                } else if (response.status === 401 || response.status === 403) {
+                    // Token is genuinely invalid or expired — log out
                     logout();
                 }
+                // Any other HTTP error (500 etc) — keep the user's session,
+                // the server wakeup banner covers the "server is down" case
             } catch (error) {
-                console.error('Session verification failed:', error);
-                logout();
+                // Network failure (server sleeping, no internet) — do NOT log
+                // out; the token may still be valid once the server is back
+                console.error('Session verification failed (network):', error);
             } finally {
                 setLoading(false);
             }

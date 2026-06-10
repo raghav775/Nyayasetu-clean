@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from models.database import get_db, User, QueryLog
 from models.schemas import CaseSearchRequest, CaseSearchResponse, SearchSource, LiveCase
 from services.rag import search_drafts
-from services.scraper import scrape_indian_kanoon
+from services.scraper import search_cases as fetch_live_cases
 from services.llm import call_llm
 from utils.auth import get_current_user
 from utils.encryption import encrypt
@@ -21,7 +21,7 @@ def search_cases(
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     rag_results = search_drafts(req.query, n_results=req.n_results)
-    live_results = scrape_indian_kanoon(req.query, max_results=5)
+    live_results = fetch_live_cases(req.query, max_results=5, db=db)
 
     rag_context = "\n\n---\n\n".join([
         f"Document: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"

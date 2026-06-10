@@ -84,6 +84,17 @@ class QueryLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class SearchCache(Base):
+    __tablename__ = "search_cache"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    query_hash = Column(String(64), unique=True, nullable=False, index=True)
+    query_text = Column(Text, nullable=False)
+    results_json = Column(Text, nullable=False)
+    source = Column(String(50), nullable=False)  # ik_api | ik_scrape | commonlii
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 def create_tables():
     Base.metadata.create_all(bind=engine)
 
