@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from models.database import create_tables, SessionLocal
@@ -54,6 +55,15 @@ def on_startup():
 def on_shutdown():
     scheduler.shutdown()
     print("[NyayaSetu] Scheduler stopped.")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    print(f"[Error] Unhandled exception on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please try again."},
+    )
 
 
 app.include_router(auth.router,       prefix="/auth",       tags=["Authentication"])

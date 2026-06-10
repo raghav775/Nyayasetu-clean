@@ -144,8 +144,9 @@ const ClauseConflict = () => {
             });
 
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || 'Analysis failed');
+                let msg = 'Analysis failed';
+                try { const e = await response.json(); msg = e.detail || msg; } catch { msg = `Server error (${response.status})`; }
+                throw new Error(msg);
             }
 
             const data = await response.json();

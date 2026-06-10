@@ -97,8 +97,9 @@ const DraftAssistant = () => {
             });
 
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || 'Draft generation failed');
+                let msg = 'Draft generation failed';
+                try { const e = await response.json(); msg = e.detail || msg; } catch { msg = `Server error (${response.status})`; }
+                throw new Error(msg);
             }
 
             const data = await response.json();

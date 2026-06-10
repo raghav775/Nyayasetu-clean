@@ -24,26 +24,24 @@ def generate_draft(
     if not req.description.strip():
         raise HTTPException(status_code=400, detail="Description cannot be empty")
 
-    search_query = f"{req.category} {req.description}" if req.category else req.description
+    try:
+        search_query = f"{req.category} {req.description}" if req.category else req.description
+        results = search_drafts(search_query, n_results=req.n_results)
+        if not results:
+            results = search_drafts(req.description, n_results=req.n_results)
 
-    # Always search WITHOUT category filter — category names may not match folder names
-    results = search_drafts(search_query, n_results=req.n_results)
+        if not results:
+            raise HTTPException(
+                status_code=404,
+                detail="No templates found. Make sure you have run ingest.py first."
+            )
 
-    if not results:
-        results = search_drafts(req.description, n_results=req.n_results)
+        context = "\n\n---\n\n".join([
+            f"Template: {r['metadata']['filename']}\nCategory: {r['metadata']['category']}\n\n{r['text']}"
+            for r in results
+        ])
 
-    if not results:
-        raise HTTPException(
-            status_code=404,
-            detail="No templates found. Make sure you have run ingest.py first."
-        )
-
-    context = "\n\n---\n\n".join([
-        f"Template: {r['metadata']['filename']}\nCategory: {r['metadata']['category']}\n\n{r['text']}"
-        for r in results
-    ])
-
-    system_prompt = """You are NyayaSetu, an expert Indian legal document drafter.
+        system_prompt = """You are NyayaSetu, an expert Indian legal document drafter.
 You generate complete, accurate, and professionally formatted legal documents.
 
 STRICT RULES:
@@ -60,7 +58,7 @@ STRICT RULES:
 - Always cite 2-3 real landmark Indian Supreme Court or High Court cases relevant to the document type
 - Use actual case names, year, and citation (e.g. Arnesh Kumar v. State of Bihar (2014) 8 SCC 273)"""
 
-    user_message = f"""Draft Request: {req.description}
+        user_message = f"""Draft Request: {req.description}
 {f"Document Category: {req.category}" if req.category else ""}
 
 Reference Templates from Database:
@@ -68,33 +66,35 @@ Reference Templates from Database:
 
 Generate a complete, properly formatted legal document under Indian law."""
 
-    draft = call_llm(system_prompt, user_message)
+        draft = call_llm(system_prompt, user_message)
 
-    try:
-        log = QueryLog(
-            user_id=current_user.id,
-            query_type="draft",
-            encrypted_query=encrypt(req.description),
+        try:
+            db.add(QueryLog(
+                user_id=current_user.id,
+                query_type="draft",
+                encrypted_query=encrypt(req.description),
+            ))
+            db.commit()
+        except Exception:
+            pass
+
+        return DraftResponse(
+            description=req.description,
+            draft=draft,
+            sources=[
+                SearchSource(
+                    filename=r["metadata"]["filename"],
+                    category=r["metadata"]["category"],
+                    score=round(r["score"], 3),
+                )
+                for r in results
+            ],
         )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
-
-    sources = [
-        SearchSource(
-            filename=r["metadata"]["filename"],
-            category=r["metadata"]["category"],
-            score=round(r["score"], 3),
-        )
-        for r in results
-    ]
-
-    return DraftResponse(
-        description=req.description,
-        draft=draft,
-        sources=sources,
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Documents] Unhandled error: {e}")
+        raise HTTPException(status_code=500, detail="Draft generation failed. Please try again.")
 
 
 @router.post("/scan-contradictions", response_model=ContradictionResponse)

@@ -20,20 +20,21 @@ def search_cases(
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-    rag_results = search_drafts(req.query, n_results=req.n_results)
-    live_results = fetch_live_cases(req.query, max_results=5, db=db)
+    try:
+        rag_results = search_drafts(req.query, n_results=req.n_results)
+        live_results = fetch_live_cases(req.query, max_results=5, db=db)
 
-    rag_context = "\n\n---\n\n".join([
-        f"Document: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"
-        for r in rag_results
-    ]) if rag_results else "No matching documents in local database."
+        rag_context = "\n\n---\n\n".join([
+            f"Document: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"
+            for r in rag_results
+        ]) if rag_results else "No matching documents in local database."
 
-    live_context = "\n\n".join([
-        f"Case: {r['title']}\nLink: {r['link']}\nExcerpt: {r['snippet']}"
-        for r in live_results
-    ]) if live_results else "No live results available right now."
+        live_context = "\n\n".join([
+            f"Case: {r['title']}\nLink: {r['link']}\nExcerpt: {r['snippet']}"
+            for r in live_results
+        ]) if live_results else "No live results available right now."
 
-    system_prompt = """You are NyayaSetu, an expert Indian legal research assistant.
+        system_prompt = """You are NyayaSetu, an expert Indian legal research assistant.
 Your job is to find relevant case law and legal precedents for advocates and legal interns.
 
 STRICT RULES:
@@ -49,7 +50,7 @@ Format your response as:
 
 Be precise and professional."""
 
-    user_message = f"""Legal Research Query: {req.query}
+        user_message = f"""Legal Research Query: {req.query}
 
 --- LOCAL LEGAL DATABASE ---
 {rag_context}
@@ -59,42 +60,46 @@ Be precise and professional."""
 
 Provide a structured legal research response. Only cite cases present in the above context."""
 
-    answer = call_llm(system_prompt, user_message)
+        answer = call_llm(system_prompt, user_message)
 
-    try:
-        log = QueryLog(
-            user_id=current_user.id,
-            query_type="case_search",
-            encrypted_query=encrypt(req.query),
+        try:
+            db.add(QueryLog(
+                user_id=current_user.id,
+                query_type="case_search",
+                encrypted_query=encrypt(req.query),
+            ))
+            db.commit()
+        except Exception:
+            pass
+
+        sources = [
+            SearchSource(
+                filename=r["metadata"]["filename"],
+                category=r["metadata"]["category"],
+                score=round(r["score"], 3),
+            )
+            for r in rag_results
+        ]
+
+        live_cases = [
+            LiveCase(
+                title=r["title"],
+                link=r["link"],
+                snippet=r["snippet"],
+                source=r["source"],
+                keywords=r.get("keywords", []),
+            )
+            for r in live_results
+        ]
+
+        return CaseSearchResponse(
+            query=req.query,
+            answer=answer,
+            sources=sources,
+            live_cases=live_cases,
         )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
-
-    sources = [
-        SearchSource(
-            filename=r["metadata"]["filename"],
-            category=r["metadata"]["category"],
-            score=round(r["score"], 3),
-        )
-        for r in rag_results
-    ]
-
-    live_cases = [
-        LiveCase(
-            title=r["title"],
-            link=r["link"],
-            snippet=r["snippet"],
-            source=r["source"],
-            keywords=r.get("keywords", []),  # ← THIS WAS MISSING
-        )
-        for r in live_results
-    ]
-
-    return CaseSearchResponse(
-        query=req.query,
-        answer=answer,
-        sources=sources,
-        live_cases=live_cases,
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Cases] Unhandled error: {e}")
+        raise HTTPException(status_code=500, detail="Case search failed. Please try again.")

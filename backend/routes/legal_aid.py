@@ -20,26 +20,23 @@ def ask_legal_aid(
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    results = search_drafts(req.question, n_results=req.n_results)
-    kanoon_results = scrape_indian_kanoon(req.question)
-    print("KANOON RESULTS:", kanoon_results)
+    try:
+        results = search_drafts(req.question, n_results=req.n_results)
+        kanoon_results = scrape_indian_kanoon(req.question)
 
-    context_parts = []
+        context_parts = []
+        for r in results:
+            context_parts.append(
+                f"Reference: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"
+            )
+        for k in kanoon_results:
+            context_parts.append(
+                f"Case Title: {k['title']}\nSnippet: {k['snippet']}\nLink: {k['link']}"
+            )
 
-    # 🔹 Local RAG results
-    for r in results:
-        context_parts.append(
-            f"Reference: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"
-        )
+        context = "\n\n---\n\n".join(context_parts) if context_parts else ""
 
-    # 🔹 Indian Kanoon results (🔥 THIS WAS MISSING)
-    for k in kanoon_results:
-        context_parts.append(
-            f"Case Title: {k['title']}\nSnippet: {k['snippet']}\nLink: {k['link']}"
-        )
-
-    context = "\n\n---\n\n".join(context_parts) if context_parts else ""
-    system_prompt = """You are NyayaSetu, a knowledgeable Indian legal aid assistant.
+        system_prompt = """You are NyayaSetu, a knowledgeable Indian legal aid assistant.
 You provide clear, accurate, and helpful legal guidance based on Indian law.
 
 Always structure your response EXACTLY like this:
@@ -60,39 +57,36 @@ This is for informational purposes only. Please consult a qualified advocate for
 
 Be precise, empathetic, and use clear language."""
 
-    user_message = f"""Legal Question: {req.question}
+        user_message = f"""Legal Question: {req.question}
 
 {"Relevant Legal References:" + chr(10) + context if context else "Answer based on your knowledge of Indian law."}"""
 
-    # 🔥 SAFE LLM CALL
-    try:
         answer = call_llm(system_prompt, user_message)
+
+        try:
+            db.add(QueryLog(
+                user_id=current_user.id,
+                query_type="legal_aid",
+                encrypted_query=encrypt(req.question),
+            ))
+            db.commit()
+        except Exception:
+            pass
+
+        return LegalAidResponse(
+            question=req.question,
+            answer=answer,
+            sources=[
+                SearchSource(
+                    filename=r["metadata"]["filename"],
+                    category=r["metadata"]["category"],
+                    score=round(r["score"], 3),
+                )
+                for r in results
+            ],
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        print("LLM ERROR:", e)  # 👈 shows error in terminal
-        answer = "⚠️ AI service temporarily unavailable. Please try again."
-
-    try:
-        log = QueryLog(
-            user_id=current_user.id,
-            query_type="legal_aid",
-            encrypted_query=encrypt(req.question),  
-        )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
-
-    sources = [
-        SearchSource(
-            filename=r["metadata"]["filename"],
-            category=r["metadata"]["category"],
-            score=round(r["score"], 3),
-        )
-        for r in results
-    ]
-
-    return LegalAidResponse(
-        question=req.question,
-        answer=answer,
-        sources=sources,
-    )
+        print(f"[LegalAid] Unhandled error: {e}")
+        raise HTTPException(status_code=500, detail="Legal aid request failed. Please try again.")

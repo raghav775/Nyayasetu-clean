@@ -77,8 +77,9 @@ const LegalAid = () => {
             clearTimeout(stageTimer2);
 
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || 'Request failed');
+                let msg = 'Request failed';
+                try { const e = await response.json(); msg = e.detail || msg; } catch { msg = `Server error (${response.status})`; }
+                throw new Error(msg);
             }
 
             const data = await response.json();

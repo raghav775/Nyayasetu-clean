@@ -131,39 +131,43 @@ def ingest_documents():
     print(f"\n[RAG] Done. {get_collection_count()} chunks stored.")
 
 def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -> list:
-    ensure_collection()
+    try:
+        ensure_collection()
 
-    if get_collection_count() == 0:
-        return []
+        if get_collection_count() == 0:
+            return []
 
-    query_embedding = get_embeddings([query])[0]
+        query_embedding = get_embeddings([query])[0]
 
-    query_filter = None
-    if category_filter:
-        query_filter = Filter(
-            must=[FieldCondition(key="category", match=MatchValue(value=category_filter))]
+        query_filter = None
+        if category_filter:
+            query_filter = Filter(
+                must=[FieldCondition(key="category", match=MatchValue(value=category_filter))]
+            )
+
+        results = get_qdrant().search(
+            collection_name=COLLECTION_NAME,
+            query_vector=query_embedding,
+            limit=n_results,
+            query_filter=query_filter,
+            with_payload=True,
         )
 
-    results = get_qdrant().search(
-        collection_name=COLLECTION_NAME,
-        query_vector=query_embedding,
-        limit=n_results,
-        query_filter=query_filter,
-        with_payload=True,
-    )
+        output = []
+        for r in results:
+            if r.score < 0.15:
+                continue
+            output.append({
+                "text": r.payload.get("text", ""),
+                "metadata": {
+                    "filename": r.payload.get("filename", ""),
+                    "category": r.payload.get("category", ""),
+                    "chunk_index": r.payload.get("chunk_index", 0),
+                },
+                "score": r.score,
+            })
 
-    output = []
-    for r in results:
-        if r.score < 0.15:
-            continue
-        output.append({
-            "text": r.payload.get("text", ""),
-            "metadata": {
-                "filename": r.payload.get("filename", ""),
-                "category": r.payload.get("category", ""),
-                "chunk_index": r.payload.get("chunk_index", 0),
-            },
-            "score": r.score,
-        })
-
-    return output
+        return output
+    except Exception as e:
+        print(f"[RAG] search_drafts failed: {e}")
+        return []

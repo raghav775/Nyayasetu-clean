@@ -90,7 +90,8 @@ export const AuthProvider = ({ children }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
             });
-            const data = await response.json();
+            let data;
+            try { data = await response.json(); } catch { return { success: false, message: `Server error (${response.status})` }; }
 
             if (response.ok) {
                 const userObj = {
@@ -119,7 +120,8 @@ export const AuthProvider = ({ children }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ full_name: fullName, email, password, role }),
             });
-            const data = await response.json();
+            let data;
+            try { data = await response.json(); } catch { return { success: false, message: `Server error (${response.status})` }; }
 
             if (response.ok) {
                 const userObj = {
