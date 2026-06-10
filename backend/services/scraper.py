@@ -270,10 +270,15 @@ def search_cases(query: str, max_results: int = 5, db=None) -> list:
 
     token = os.getenv("INDIAN_KANOON_TOKEN", "").strip()
 
+    # Bias the IK search towards landmark / Supreme Court results.
+    # Cache is still keyed on the original query so the user's exact phrasing
+    # hits cache correctly on repeat searches.
+    landmark_query = f"{query} landmark judgment Supreme Court"
+
     # 2. Indian Kanoon API
     if token:
         try:
-            results = _fetch_indiankanoon_api(query, max_results, token)
+            results = _fetch_indiankanoon_api(landmark_query, max_results, token)
             if results:
                 _set_cache(db, query, results, "ik_api")
                 print(f"[CaseSearch] IK API — {len(results)} results")
@@ -286,7 +291,7 @@ def search_cases(query: str, max_results: int = 5, db=None) -> list:
 
     # 3. Indian Kanoon scrape
     try:
-        results = _fetch_indiankanoon_scrape(query, max_results)
+        results = _fetch_indiankanoon_scrape(landmark_query, max_results)
         if results:
             _set_cache(db, query, results, "ik_scrape")
             print(f"[CaseSearch] IK scrape — {len(results)} results")

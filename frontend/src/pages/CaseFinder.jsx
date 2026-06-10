@@ -57,7 +57,7 @@ const CaseFinder = () => {
             const response = await fetch('/api/cases/search', {
                 method: 'POST',
                 headers: getAuthHeaders(),
-                body: JSON.stringify({ query, n_results: 5 }),
+                body: JSON.stringify({ query, n_results: 10 }),
             });
 
             if (!response.ok) {
@@ -236,7 +236,7 @@ const CaseFinder = () => {
                             {liveCases.length > 0 && (
                                 <>
                                     <p className="results-count">
-                                        {liveCases.length} live case{liveCases.length !== 1 ? 's' : ''} from Indian Kanoon for &quot;{searchQuery}&quot;
+                                        {liveCases.length} landmark case{liveCases.length !== 1 ? 's' : ''} for &quot;{searchQuery}&quot;
                                     </p>
                                     <div className="case-list">
                                         {liveCases.map((c, i) => (
