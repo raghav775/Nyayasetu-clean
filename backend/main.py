@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from apscheduler.schedulers.background import BackgroundScheduler
-from models.database import create_tables, SessionLocal
+from models.database import create_tables, engine, SessionLocal
 from services.compliance_fetcher import refresh_compliance_alerts
 from services.llm import LLMUnavailableError, llm_status
 from routes import auth, workflow, compliance, documents, cases, legal_aid
@@ -100,5 +100,13 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health():
-    # `llm` tells you at a glance whether GROQ_API_KEY is set and why the last AI call failed.
-    return {"status": "ok", "llm": llm_status()}
+    # Deployment checklist at a glance — booleans/names only, never secrets.
+    return {
+        "status": "ok",
+        "llm": llm_status(),  # is GROQ_API_KEY set, which models, why the last AI call failed
+        "config": {
+            "database": engine.dialect.name,  # "sqlite" = accounts are lost on every Render restart
+            "vector_db": "cloud" if os.getenv("QDRANT_URL") and os.getenv("QDRANT_API_KEY") else "local",
+            "indian_kanoon_api": bool(os.getenv("INDIAN_KANOON_TOKEN", "").strip()),  # false = scraper only
+        },
+    }
