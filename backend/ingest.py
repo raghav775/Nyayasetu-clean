@@ -8,7 +8,7 @@ if __name__ == "__main__":
     print("NyayaSetu — Document Ingestion Pipeline")
     print("=" * 55)
     print("This will load all RTF/DOCX files from data/drafts/")
-    print("into the ChromaDB vector database.")
+    print("into the Qdrant vector database.")
     print("This runs ONCE and takes 10-15 minutes.")
     print("=" * 55)
     ingest_documents()

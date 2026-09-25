@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext();
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
@@ -81,6 +82,8 @@ export const AuthProvider = ({ children }) => {
             }
         };
         verifySession();
+        // Only re-verify when the token changes; `logout` is recreated every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
     const login = async (email, password) => {
@@ -108,7 +111,7 @@ export const AuthProvider = ({ children }) => {
             } else {
                 return { success: false, message: data.detail || 'Login failed.' };
             }
-        } catch (error) {
+        } catch {
             return { success: false, message: 'Server connection failed. Is the backend running?' };
         }
     };
@@ -138,7 +141,7 @@ export const AuthProvider = ({ children }) => {
             } else {
                 return { success: false, message: data.detail || 'Registration failed.' };
             }
-        } catch (error) {
+        } catch {
             return { success: false, message: 'Server connection failed.' };
         }
     };
@@ -155,10 +158,25 @@ export const AuthProvider = ({ children }) => {
         'Authorization': `Bearer ${token}`,
     });
 
+    // fetch() with the auth header attached. If the server says the token is no longer
+    // valid (expired, or the account vanished after a backend restart) sign out and go to
+    // the login page instead of leaving the user staring at a cryptic error.
+    const authFetch = async (url, options = {}) => {
+        const response = await fetch(url, {
+            ...options,
+            headers: { ...getAuthHeaders(), ...(options.headers || {}) },
+        });
+        if (response.status === 401) {
+            logout();
+            throw new Error('Your session has expired. Please sign in again.');
+        }
+        return response;
+    };
+
     return (
         <AuthContext.Provider value={{
             user, token, isAuthenticated: !!token,
-            login, register, logout, loading, getAuthHeaders, serverStatus
+            login, register, logout, loading, getAuthHeaders, authFetch, serverStatus
         }}>
             {children}
         </AuthContext.Provider>

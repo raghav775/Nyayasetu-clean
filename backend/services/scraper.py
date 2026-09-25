@@ -127,11 +127,12 @@ def _fetch_indiankanoon_api(query: str, max_results: int, token: str) -> list:
         if not tid or not title:
             continue
         keywords = extract_keywords_from_text(snippet, top_n=6)
+        court = (doc.get("docsource") or "").strip()
         results.append({
             "title": title,
             "link": f"{BASE_URL}/doc/{tid}/",
             "snippet": snippet,
-            "source": "Indian Kanoon",
+            "source": f"Indian Kanoon · {court}" if court else "Indian Kanoon",
             "keywords": keywords,
         })
     return results
@@ -149,8 +150,24 @@ def _fetch_indiankanoon_scrape(query: str, max_results: int) -> list:
 
     found = []
 
-    # Strategy 1: id="res_N" divs (Indian Kanoon's actual HTML structure)
-    result_divs = soup.find_all("div", id=lambda x: x and x.startswith("res_"))
+    # Strategy 0: current markup — <article class="result"> with an <h4 class="result_title">
+    # link (to /docfragment/<id>/), a .headline excerpt and a .docsource court label.
+    for art in soup.select("article.result")[:max_results]:
+        a_tag = art.select_one(".result_title a")
+        if not a_tag:
+            continue
+        title = re.sub(r"\s+", " ", a_tag.get_text(" ", strip=True))
+        href = a_tag.get("href", "")
+        m = re.search(r"/doc(?:fragment)?/(\d+)", href)
+        if len(title) < 5 or not m:
+            continue
+        headline = art.select_one(".headline")
+        snippet = re.sub(r"\s+", " ", headline.get_text(" ", strip=True))[:400] if headline else ""
+        court = art.select_one(".docsource")
+        found.append((title, f"{BASE_URL}/doc/{m.group(1)}/", snippet, court.get_text(strip=True) if court else ""))
+
+    # Strategy 1: id="res_N" divs (older Indian Kanoon markup)
+    result_divs = [] if found else soup.find_all("div", id=lambda x: x and x.startswith("res_"))
     if result_divs:
         for div in result_divs[:max_results]:
             a_tag = div.find("a")
@@ -165,7 +182,7 @@ def _fetch_indiankanoon_scrape(query: str, max_results: int) -> list:
             snippet = p_tag.get_text(separator=" ", strip=True)[:400] if p_tag else ""
             if not snippet:
                 snippet = div.get_text(separator=" ", strip=True).replace(title, "").strip()[:300]
-            found.append((title, link, snippet))
+            found.append((title, link, snippet, ""))
 
     # Strategy 2: any /doc/ links
     if not found:
@@ -173,7 +190,8 @@ def _fetch_indiankanoon_scrape(query: str, max_results: int) -> list:
         for a_tag in soup.find_all("a", href=lambda h: h and "/doc/" in str(h)):
             title = a_tag.get_text(strip=True)
             href = a_tag.get("href", "")
-            if not title or len(title) < 5 or href in seen:
+            # "Full Document" is the label of a result's own link, not a case name
+            if not title or len(title) < 5 or title == "Full Document" or href in seen:
                 continue
             seen.add(href)
             link = BASE_URL + href if href.startswith("/") else href
@@ -181,18 +199,18 @@ def _fetch_indiankanoon_scrape(query: str, max_results: int) -> list:
             snippet = ""
             if parent:
                 snippet = parent.get_text(separator=" ", strip=True).replace(title, "").strip()[:400]
-            found.append((title, link, snippet))
+            found.append((title, link, snippet, ""))
             if len(found) >= max_results:
                 break
 
     results = []
-    for title, link, snippet in found[:max_results]:
+    for title, link, snippet, court in found[:max_results]:
         keywords = extract_keywords_from_text(snippet, top_n=6) if snippet else []
         results.append({
             "title": title,
             "link": link,
             "snippet": snippet,
-            "source": "Indian Kanoon",
+            "source": f"Indian Kanoon · {court}" if court else "Indian Kanoon",
             "keywords": keywords,
         })
     return results
@@ -275,14 +293,20 @@ def search_cases(query: str, max_results: int = 5, db=None) -> list:
     # hits cache correctly on repeat searches.
     landmark_query = f"{query} landmark judgment Supreme Court"
 
+    # Indian Kanoon requires every word to match, so the extra "landmark judgment Supreme
+    # Court" words can turn a valid query (or one with a typo) into zero results. Try the
+    # biased query first, then the user's own words.
+    queries = [landmark_query, query]
+
     # 2. Indian Kanoon API
     if token:
         try:
-            results = _fetch_indiankanoon_api(landmark_query, max_results, token)
-            if results:
-                _set_cache(db, query, results, "ik_api")
-                print(f"[CaseSearch] IK API — {len(results)} results")
-                return results
+            for q in queries:
+                results = _fetch_indiankanoon_api(q, max_results, token)
+                if results:
+                    _set_cache(db, query, results, "ik_api")
+                    print(f"[CaseSearch] IK API — {len(results)} results")
+                    return results
             print("[CaseSearch] IK API returned 0 results, falling back")
         except Exception as e:
             print(f"[CaseSearch] IK API failed: {e}")
@@ -291,11 +315,12 @@ def search_cases(query: str, max_results: int = 5, db=None) -> list:
 
     # 3. Indian Kanoon scrape
     try:
-        results = _fetch_indiankanoon_scrape(landmark_query, max_results)
-        if results:
-            _set_cache(db, query, results, "ik_scrape")
-            print(f"[CaseSearch] IK scrape — {len(results)} results")
-            return results
+        for q in queries:
+            results = _fetch_indiankanoon_scrape(q, max_results)
+            if results:
+                _set_cache(db, query, results, "ik_scrape")
+                print(f"[CaseSearch] IK scrape — {len(results)} results")
+                return results
         print("[CaseSearch] IK scrape returned 0 results, falling back")
     except Exception as e:
         print(f"[CaseSearch] IK scrape failed: {e}")

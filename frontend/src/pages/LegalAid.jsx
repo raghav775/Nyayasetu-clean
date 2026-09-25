@@ -40,7 +40,7 @@ const parseAnswer = (rawAnswer) => {
 };
 
 const LegalAid = () => {
-    const { getAuthHeaders } = useAuth();
+    const { authFetch } = useAuth();
 
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -67,14 +67,10 @@ const LegalAid = () => {
         const stageTimer2 = setTimeout(() => setLoadingStage(2), 2500);
 
         try {
-            const response = await fetch('/api/legal-aid/ask', {
+            const response = await authFetch('/api/legal-aid/ask', {
                 method: 'POST',
-                headers: getAuthHeaders(),
                 body: JSON.stringify({ question: text, n_results: 3 }),
             });
-
-            clearTimeout(stageTimer1);
-            clearTimeout(stageTimer2);
 
             if (!response.ok) {
                 let msg = 'Request failed';
@@ -109,6 +105,8 @@ const LegalAid = () => {
             };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
+            clearTimeout(stageTimer1);
+            clearTimeout(stageTimer2);
             setIsThinking(false);
         }
     };
@@ -161,7 +159,7 @@ const LegalAid = () => {
 
                                 {msg.type === 'error' && (
                                     <div className="user-query-bubble" style={{ background: '#fee2e2', color: '#991b1b' }}>
-                                        <p>Error: {msg.text}. Please ensure the backend is running.</p>
+                                        <p>{msg.text}</p>
                                     </div>
                                 )}
 

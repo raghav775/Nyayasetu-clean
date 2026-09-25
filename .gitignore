@@ -1,2 +1,21 @@
-
+# Secrets and local databases
+.env
+.env.*
+!.env.example
+*.db
 qdrant_db/
+chroma_db/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Node / build output
+node_modules/
+dist/
+build/
+
+.DS_Store

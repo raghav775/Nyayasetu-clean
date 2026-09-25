@@ -1,11 +1,11 @@
 import os
 import uuid
+import threading
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, VectorParams, PointStruct, Filter,
     FieldCondition, MatchValue
 )
-from groq import Groq
 from utils.document_loader import load_all_documents
 
 QDRANT_PATH = os.getenv("QDRANT_PATH", "./qdrant_db")
@@ -15,13 +15,14 @@ VECTOR_SIZE = 384
 
 _qdrant_client = None
 _embedding_model = None
+_embedding_lock = threading.Lock()
 
 def get_qdrant():
     global _qdrant_client
     if _qdrant_client is None:
         qdrant_url = os.getenv("QDRANT_URL")
         qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        
+
         if qdrant_url and qdrant_api_key:
             _qdrant_client = QdrantClient(
             url=qdrant_url,
@@ -35,12 +36,15 @@ def get_qdrant():
 
 
 def get_embeddings(texts: list) -> list:
-    from fastembed import TextEmbedding
     global _embedding_model
     if _embedding_model is None:
-        print("[RAG] Loading fastembed model...")
-        _embedding_model = TextEmbedding("BAAI/bge-small-en-v1.5")
-        print("[RAG] Model ready.")
+        # Locked: the startup warm-up thread and a first request must not both load the model.
+        with _embedding_lock:
+            if _embedding_model is None:
+                from fastembed import TextEmbedding
+                print("[RAG] Loading fastembed model...")
+                _embedding_model = TextEmbedding("BAAI/bge-small-en-v1.5")
+                print("[RAG] Model ready.")
     embeddings = list(_embedding_model.embed(texts))
     return [e.tolist() for e in embeddings]
 
@@ -132,9 +136,9 @@ def ingest_documents():
 
 def search_drafts(query: str, n_results: int = 5, category_filter: str = None) -> list:
     try:
-        ensure_collection()
-
-        if get_collection_count() == 0:
+        # One cheap call: an empty database returns early without loading the embedding
+        # model, and a missing collection raises and is handled below.
+        if get_qdrant().count(collection_name=COLLECTION_NAME).count == 0:
             return []
 
         query_embedding = get_embeddings([query])[0]

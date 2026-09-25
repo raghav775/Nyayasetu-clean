@@ -7,12 +7,17 @@ from models.schemas import (
     SearchSource
 )
 from services.rag import search_drafts
-from services.llm import call_llm
+from services.llm import call_llm, clip, LLMUnavailableError
 from services.contradiction import find_contradictions
 from utils.auth import get_current_user
 from utils.encryption import encrypt
 
 router = APIRouter()
+
+# Keep prompt + answer inside Groq's free-tier request limit (see services/llm.py).
+# 5 templates x 2400 chars is ~3k tokens, leaving room for a long generated document.
+LLM_TEMPLATE_CHARS = 2400
+DRAFT_MAX_TOKENS = 2800
 
 
 @router.post("/draft", response_model=DraftResponse)
@@ -30,16 +35,12 @@ def generate_draft(
         if not results:
             results = search_drafts(req.description, n_results=req.n_results)
 
-        if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No templates found. Make sure you have run ingest.py first."
-            )
-
+        # No templates (e.g. vector DB unreachable or not ingested yet): still draft from
+        # standard Indian legal practice — the UI already handles an empty sources list.
         context = "\n\n---\n\n".join([
-            f"Template: {r['metadata']['filename']}\nCategory: {r['metadata']['category']}\n\n{r['text']}"
+            f"Template: {r['metadata']['filename']}\nCategory: {r['metadata']['category']}\n\n{clip(r['text'], LLM_TEMPLATE_CHARS)}"
             for r in results
-        ])
+        ]) if results else "No reference templates available — draft from standard Indian legal practice."
 
         system_prompt = """You are NyayaSetu, an expert Indian legal document drafter.
 You generate complete, accurate, and professionally formatted legal documents.
@@ -66,7 +67,7 @@ Reference Templates from Database:
 
 Generate a complete, properly formatted legal document under Indian law."""
 
-        draft = call_llm(system_prompt, user_message)
+        draft = call_llm(system_prompt, user_message, max_tokens=DRAFT_MAX_TOKENS)
 
         try:
             db.add(QueryLog(
@@ -90,7 +91,7 @@ Generate a complete, properly formatted legal document under Indian law."""
                 for r in results
             ],
         )
-    except HTTPException:
+    except (HTTPException, LLMUnavailableError):
         raise
     except Exception as e:
         print(f"[Documents] Unhandled error: {e}")
@@ -109,6 +110,10 @@ def scan_contradictions(
         )
 
     result = find_contradictions(req.document_a, req.document_b)
+
+    # A malformed AI reply is a failed analysis, not "no contradictions found".
+    if result.get("_error"):
+        raise HTTPException(status_code=502, detail=result["_error"])
 
     contradictions = [
         ContradictionPoint(**c)

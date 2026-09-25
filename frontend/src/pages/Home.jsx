@@ -23,9 +23,6 @@ const Home = () => {
 
     // 1. Simulation states
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeStep, setActiveStep] = useState(0);
-    const [aiAnalyzed, setAiAnalyzed] = useState(false);
-    const [isSimulating, setIsSimulating] = useState(false);
 
     // 2. Modal specific states
     const [modalConfig, setModalConfig] = useState({

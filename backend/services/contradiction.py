@@ -2,6 +2,10 @@ from services.llm import call_llm
 import json
 import re
 
+# Per document. ~4.5k chars each keeps prompt + JSON answer inside Groq's free-tier
+# request limit while covering far more of a contract than the old 2000-char cut-off.
+MAX_DOC_CHARS = 4500
+
 
 def _strip_markdown_fences(text: str) -> str:
     """Remove markdown code fences that LLMs sometimes add despite instructions."""
@@ -76,10 +80,10 @@ If no contradictions exist, return exactly:
     user_message = f"""Analyze these two legal documents and return a JSON object listing all contradictions.
 
 === DOCUMENT A ===
-{document_a[:2000]}
+{document_a[:MAX_DOC_CHARS]}
 
 === DOCUMENT B ===
-{document_b[:2000]}
+{document_b[:MAX_DOC_CHARS]}
 
 Start your response with {{ and end with }}. Raw JSON only."""
 

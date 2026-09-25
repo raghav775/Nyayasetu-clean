@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import './ClauseConflict.css';
 
 const ClauseConflict = () => {
-    const { getAuthHeaders } = useAuth();
+    const { authFetch } = useAuth();
     const [parties, setParties] = useState([
         { id: 'party-1', name: 'Party 1', files: [], content: '' },
         { id: 'party-2', name: 'Party 2', files: [], content: '' },
@@ -134,9 +134,8 @@ const ClauseConflict = () => {
         setError('');
 
         try {
-            const response = await fetch('/api/documents/scan-contradictions', {
+            const response = await authFetch('/api/documents/scan-contradictions', {
                 method: 'POST',
-                headers: getAuthHeaders(),
                 body: JSON.stringify({
                     document_a: `${validParties[0].name}:\n${validParties[0].content}`,
                     document_b: `${validParties[1].name}:\n${validParties[1].content}`,

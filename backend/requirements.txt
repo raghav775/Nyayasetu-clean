@@ -2,24 +2,26 @@ fastapi==0.111.0
 uvicorn==0.30.1
 python-dotenv==1.0.1
 pydantic[email]==2.7.1
+python-multipart==0.0.9
 
 # Auth
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
+passlib[argon2]==1.7.4
+argon2-cffi==23.1.0
 
-# Database
+# Database (SQLite locally; set DATABASE_URL to Postgres in production)
 sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
 
 # Encryption AES-256
 cryptography==42.0.8
 
-# LLM
-groq==0.9.0
+# LLM — Groq online, Ollama optional offline fallback
+groq==1.7.0
 ollama==0.2.1
 
 # Embeddings + Vector DB (works on Python 3.13, no Rust/C++ needed)
-
+fastembed==0.3.6
 qdrant-client==1.9.1
 numpy
 
@@ -34,43 +36,6 @@ beautifulsoup4==4.12.3
 
 # Scheduler
 apscheduler==3.10.4
-
-# Utilities
-tqdm==4.66.4
-argon2-cffi==23.1.0
-fastapi==0.111.0
-uvicorn==0.30.1
-python-dotenv==1.0.1
-pydantic[email]==2.7.1
-
-# Auth
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
-argon2-cffi==23.1.0
-
-# Database
-sqlalchemy==2.0.30
-
-# Encryption AES-256
-cryptography==42.0.8
-
-# LLM
-groq==0.9.0
-
-# Embeddings + Vector DB
-fastembed==0.3.6
-qdrant-client==1.9.1
-numpy
-
-# Document parsing
-striprtf==0.0.26
-python-docx==1.1.2
-pypdf==4.2.0
-
-# Scraping
-httpx==0.27.0
-beautifulsoup4==4.12.3
 
 # Utilities
 tqdm==4.66.4

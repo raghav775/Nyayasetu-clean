@@ -15,7 +15,7 @@ const SUGGESTIONS = [
 ];
 
 const CaseFinder = () => {
-    const { getAuthHeaders } = useAuth();
+    const { authFetch } = useAuth();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
@@ -23,6 +23,7 @@ const CaseFinder = () => {
     const [error, setError] = useState('');
 
     const [aiAnswer, setAiAnswer] = useState('');
+    const [aiError, setAiError] = useState('');
     const [localSources, setLocalSources] = useState([]);
     const [liveCases, setLiveCases] = useState([]);
     const [judgementKeywords, setJudgementKeywords] = useState([]);
@@ -49,15 +50,15 @@ const CaseFinder = () => {
         setHasSearched(false);
         setError('');
         setAiAnswer('');
+        setAiError('');
         setLocalSources([]);
         setLiveCases([]);
         setJudgementKeywords([]);
 
         try {
-            const response = await fetch('/api/cases/search', {
+            const response = await authFetch('/api/cases/search', {
                 method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({ query, n_results: 10 }),
+                body: JSON.stringify({ query, n_results: 5 }),
             });
 
             if (!response.ok) {
@@ -67,7 +68,8 @@ const CaseFinder = () => {
             }
 
             const data = await response.json();
-            setAiAnswer(data.answer);
+            setAiAnswer(data.answer || '');
+            setAiError(data.ai_error || '');
             setLocalSources(data.sources || []);
             setLiveCases(data.live_cases || []);
 
@@ -230,7 +232,27 @@ const CaseFinder = () => {
                                     <Sparkles size={18} className="text-primary glow-icon" />
                                     <h4>AI Research Synthesis</h4>
                                 </div>
-                                <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7' }}>{aiAnswer}</p>
+                                {aiError ? (
+                                    <div style={{ lineHeight: '1.7' }}>
+                                        <p>
+                                            <AlertCircle size={16} style={{ display: 'inline', marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                            {aiError}
+                                        </p>
+                                        <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>
+                                            The AI summary could not be generated, but the live case results are shown below.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            className="unified-search-btn"
+                                            style={{ marginTop: '0.75rem', padding: '0.5rem 1.25rem', borderRadius: '8px' }}
+                                            onClick={() => handleSearchWithQuery(searchQuery)}
+                                        >
+                                            Try again
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7' }}>{aiAnswer}</p>
+                                )}
                             </div>
 
                             {liveCases.length > 0 && (

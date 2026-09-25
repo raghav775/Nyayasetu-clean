@@ -5,7 +5,7 @@ from models.database import get_db, User
 from models.schemas import ComplianceAlertResponse, ComplianceCheckRequest, ComplianceCheckResponse
 from utils.auth import get_current_user
 from services.compliance_fetcher import refresh_compliance_alerts, get_active_alerts
-from services.llm import call_llm
+from services.llm import call_llm, LLMUnavailableError
 import json
 import re
 
@@ -55,13 +55,14 @@ Respond ONLY in this JSON format:
 
 Check against: Labour laws, Data Privacy (PDPA/IT Act), Corporate law (Companies Act 2013), Contract Act, and any other applicable Indian regulations."""
 
-    raw = call_llm(system_prompt, user_message)
-
     try:
+        raw = call_llm(system_prompt, user_message)
         json_match = re.search(r'\{.*\}', raw, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group())
             return ComplianceCheckResponse(**data)
+    except LLMUnavailableError:
+        raise
     except Exception as e:
         print(f"[Compliance] Parse error: {e}")
 

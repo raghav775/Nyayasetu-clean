@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session
 from models.database import get_db, User, QueryLog
 from models.schemas import LegalAidRequest, LegalAidResponse, SearchSource
 from services.rag import search_drafts
-from services.llm import call_llm
+from services.llm import call_llm, clip, LLMUnavailableError
 from utils.auth import get_current_user
 from utils.encryption import encrypt
 from services.scraper import scrape_indian_kanoon
 
 router = APIRouter()
+
+# Keep the prompt well inside Groq's free-tier request limit (see services/llm.py).
+LLM_LOCAL_CHUNKS = 3
+LLM_LOCAL_CHUNK_CHARS = 1200
+LLM_KANOON_SNIPPET_CHARS = 400
 
 
 @router.post("/ask", response_model=LegalAidResponse)
@@ -25,13 +30,13 @@ def ask_legal_aid(
         kanoon_results = scrape_indian_kanoon(req.question)
 
         context_parts = []
-        for r in results:
+        for r in results[:LLM_LOCAL_CHUNKS]:
             context_parts.append(
-                f"Reference: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"
+                f"Reference: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{clip(r['text'], LLM_LOCAL_CHUNK_CHARS)}"
             )
         for k in kanoon_results:
             context_parts.append(
-                f"Case Title: {k['title']}\nSnippet: {k['snippet']}\nLink: {k['link']}"
+                f"Case Title: {k['title']}\nSnippet: {clip(k['snippet'], LLM_KANOON_SNIPPET_CHARS)}\nLink: {k['link']}"
             )
 
         context = "\n\n---\n\n".join(context_parts) if context_parts else ""
@@ -85,7 +90,7 @@ Be precise, empathetic, and use clear language."""
                 for r in results
             ],
         )
-    except HTTPException:
+    except (HTTPException, LLMUnavailableError):
         raise
     except Exception as e:
         print(f"[LegalAid] Unhandled error: {e}")

@@ -8,7 +8,7 @@ from models.schemas import (
     TaskResponse, GenerateWorkflowRequest
 )
 from utils.auth import get_current_user
-from services.llm import call_llm
+from services.llm import call_llm, LLMUnavailableError
 import json
 import re
 
@@ -40,12 +40,13 @@ Company B: {company_b or "Party B"}
 
 Include all documents, verifications, filings, and steps needed under Indian law."""
 
-    raw = call_llm(system_prompt, user_message)
-
     try:
+        raw = call_llm(system_prompt, user_message)
         json_match = re.search(r'\[.*\]', raw, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
+    except LLMUnavailableError as e:
+        print(f"[Workflow] AI unavailable, using default checklist: {e.reason}")
     except Exception as e:
         print(f"[Workflow] Task parse error: {e}")
 

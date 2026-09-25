@@ -5,12 +5,26 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
     envVars:
+      # LLM
       - key: GROQ_API_KEY
         sync: false
-      - key: SECRET_KEY
+      # Auth / encryption — generate both with: python utils/generate_keys.py
+      - key: JWT_SECRET_KEY
         sync: false
       - key: ENCRYPTION_KEY
         sync: false
+      # Case search
       - key: INDIAN_KANOON_TOKEN
+        sync: false
+      # Vector DB (Qdrant Cloud). Without these the app uses an empty local DB on Render's
+      # ephemeral disk and draft/RAG search finds nothing.
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      # User database. Without this the app uses SQLite on Render's ephemeral disk and every
+      # account is wiped on restart. Use a hosted Postgres (Render, Neon, Supabase...).
+      - key: DATABASE_URL
         sync: false

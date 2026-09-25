@@ -9,7 +9,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from models.database import get_db, User
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change_this_in_production")
+# render.yaml historically declared this as SECRET_KEY, so accept both names — otherwise a
+# deployment configured from that file silently signs tokens with the public default below.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY") or "change_this_in_production"
+if JWT_SECRET_KEY == "change_this_in_production":
+    print("[Auth] WARNING: JWT_SECRET_KEY is not set — using an insecure default. "
+          "Generate one with: python utils/generate_keys.py")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 

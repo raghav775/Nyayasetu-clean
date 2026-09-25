@@ -1,13 +1,17 @@
+import os
+
+# Must run before the imports below: several modules read env vars at import time.
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from models.database import create_tables, SessionLocal
 from services.compliance_fetcher import refresh_compliance_alerts
+from services.llm import LLMUnavailableError, llm_status
 from routes import auth, workflow, compliance, documents, cases, legal_aid
-
-load_dotenv()
 
 app = FastAPI(
     title="NyayaSetu API",
@@ -17,13 +21,17 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://nyayasetu.vercel.app",
+]
+# Extra origins (e.g. a custom domain) as a comma-separated list.
+allowed_origins += [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://nyayasetu.vercel.app",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,7 +44,6 @@ scheduler = BackgroundScheduler()
 def on_startup():
     create_tables()
     print("[NyayaSetu] Database tables ready.")
-    print("[NyayaSetu] Server ready.")
 
     def scheduled_refresh():
         db = SessionLocal()
@@ -55,6 +62,12 @@ def on_startup():
 def on_shutdown():
     scheduler.shutdown()
     print("[NyayaSetu] Scheduler stopped.")
+
+
+@app.exception_handler(LLMUnavailableError)
+async def llm_unavailable_handler(request: Request, exc: LLMUnavailableError):
+    print(f"[LLM] {request.method} {request.url.path} -> 503 ({exc.reason})")
+    return JSONResponse(status_code=503, content={"detail": exc.message})
 
 
 @app.exception_handler(Exception)
@@ -87,4 +100,5 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health():
-    return {"status": "ok"}
+    # `llm` tells you at a glance whether GROQ_API_KEY is set and why the last AI call failed.
+    return {"status": "ok", "llm": llm_status()}

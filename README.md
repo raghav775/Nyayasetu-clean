@@ -30,12 +30,12 @@ No hallucinations. No guesswork. Every answer is grounded in real legal data.
 ## Tech Stack
 
 - **Backend** — Python, FastAPI
-- **LLM (Online)** — Groq API (Llama 3.3 70B) — free tier
+- **LLM (Online)** — Groq API (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`) — free tier
 - **LLM (Offline)** — Ollama (Llama 3.2)
-- **Embeddings** — sentence-transformers (local, free)
-- **Vector DB** — Qdrant (local, embedded)
+- **Embeddings** — fastembed (`BAAI/bge-small-en-v1.5`, local, free)
+- **Vector DB** — Qdrant (embedded locally, or Qdrant Cloud in production)
 - **Case Data** — Indian Kanoon (live search + Hugging Face dataset)
-- **Frontend** — React
+- **Frontend** — React + Vite
 
 ---
 
@@ -75,7 +75,8 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env      # Add your Groq API key
+cp .env.example .env      # Add your Groq API key, then generate secrets: python utils/generate_keys.py
+python ingest.py          # one-time: load the draft templates into the vector DB
 uvicorn main:app --reload
 ```
 
@@ -83,7 +84,7 @@ uvicorn main:app --reload
 ```bash
 cd frontend
 npm install
-npm start
+npm run dev      # proxies /api to http://localhost:8000
 ```
 
 ### Offline Mode (Ollama)
@@ -96,9 +97,21 @@ ollama pull llama3.2
 
 ## Environment Variables
 
-```
-GROQ_API_KEY=your_groq_api_key_here
-```
+See [backend/.env.example](backend/.env.example) for the full list. The important ones:
+
+| Variable | Purpose |
+|---|---|
+| `GROQ_API_KEY` | Enables the AI features (required) |
+| `JWT_SECRET_KEY`, `ENCRYPTION_KEY` | Auth + query encryption — generate with `python utils/generate_keys.py` |
+| `INDIAN_KANOON_TOKEN` | Indian Kanoon API token (falls back to scraping) |
+| `QDRANT_URL`, `QDRANT_API_KEY` | Qdrant Cloud, so templates survive Render restarts |
+| `DATABASE_URL` | Hosted Postgres for user accounts (SQLite is wiped on Render's free tier) |
+| `GROQ_MODEL`, `GROQ_FALLBACK_MODELS` | Optional model overrides |
+
+> **Groq model retirements:** Groq retired `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` on
+> 2026-08-16 — calls to them fail with `404 model_not_found`. The defaults are now
+> `openai/gpt-oss-120b` → `openai/gpt-oss-20b`. If AI features stop working, open `/health` on the
+> backend: it reports whether the key is set, which models are in use, and why the last AI call failed.
 
 ---
 

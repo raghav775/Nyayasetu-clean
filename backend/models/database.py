@@ -5,15 +5,20 @@ from sqlalchemy import (
     create_engine, Column, String, DateTime,
     Boolean, Text, Integer, ForeignKey
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nyayasetu.db")
+DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./nyayasetu.db"  # `or`: an empty value in .env means "unset"
+# Hosts such as Render/Heroku hand out "postgres://", which SQLAlchemy 2.x no longer accepts.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
+if DATABASE_URL.startswith("sqlite"):
+    # SQLite file lives on local disk. On Render's free tier that disk is wiped on every
+    # restart/spin-down, taking all user accounts with it — set DATABASE_URL to a hosted
+    # Postgres for anything beyond a demo.
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

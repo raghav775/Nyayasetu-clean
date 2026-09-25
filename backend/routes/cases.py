@@ -4,11 +4,19 @@ from models.database import get_db, User, QueryLog
 from models.schemas import CaseSearchRequest, CaseSearchResponse, SearchSource, LiveCase
 from services.rag import search_drafts
 from services.scraper import search_cases as fetch_live_cases
-from services.llm import call_llm
+from services.llm import call_llm, clip, LLMUnavailableError
 from utils.auth import get_current_user
 from utils.encryption import encrypt
 
 router = APIRouter()
+
+# Groq's free tier rejects requests over ~12k tokens (prompt + answer). The local database
+# only holds draft templates, so it is supporting context here — keep it small and leave the
+# room for the live case results.
+MAX_LOCAL_SOURCES = 5        # references listed back to the user
+LLM_LOCAL_CHUNKS = 3         # of those, how many are shown to the model
+LLM_LOCAL_CHUNK_CHARS = 700
+LLM_LIVE_SNIPPET_CHARS = 400
 
 
 @router.post("/search", response_model=CaseSearchResponse)
@@ -21,16 +29,16 @@ def search_cases(
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     try:
-        rag_results = search_drafts(req.query, n_results=req.n_results)
+        rag_results = search_drafts(req.query, n_results=min(req.n_results or MAX_LOCAL_SOURCES, MAX_LOCAL_SOURCES))
         live_results = fetch_live_cases(req.query, max_results=10, db=db)
 
         rag_context = "\n\n---\n\n".join([
-            f"Document: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{r['text']}"
-            for r in rag_results
+            f"Document: {r['metadata']['filename']} | Category: {r['metadata']['category']}\n{clip(r['text'], LLM_LOCAL_CHUNK_CHARS)}"
+            for r in rag_results[:LLM_LOCAL_CHUNKS]
         ]) if rag_results else "No matching documents in local database."
 
         live_context = "\n\n".join([
-            f"Case: {r['title']}\nLink: {r['link']}\nExcerpt: {r['snippet']}"
+            f"Case: {r['title']}\nLink: {r['link']}\nExcerpt: {clip(r['snippet'], LLM_LIVE_SNIPPET_CHARS)}"
             for r in live_results
         ]) if live_results else "No live results available right now."
 
@@ -73,7 +81,15 @@ Response format:
 
 Identify ALL landmark and leading cases for this query. Use the search results above AND your own legal knowledge to ensure complete coverage."""
 
-        answer = call_llm(system_prompt, user_message)
+        # If the AI is down the live Indian Kanoon results are still worth returning,
+        # so only fail the whole request when there is nothing else to show.
+        answer, ai_error = "", None
+        try:
+            answer = call_llm(system_prompt, user_message)
+        except LLMUnavailableError as e:
+            if not live_results and not rag_results:
+                raise
+            ai_error = e.message
 
         try:
             db.add(QueryLog(
@@ -108,10 +124,11 @@ Identify ALL landmark and leading cases for this query. Use the search results a
         return CaseSearchResponse(
             query=req.query,
             answer=answer,
+            ai_error=ai_error,
             sources=sources,
             live_cases=live_cases,
         )
-    except HTTPException:
+    except (HTTPException, LLMUnavailableError):
         raise
     except Exception as e:
         print(f"[Cases] Unhandled error: {e}")

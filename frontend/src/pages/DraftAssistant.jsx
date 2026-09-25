@@ -42,7 +42,7 @@ const TEMPLATE_GROUPS = [
 ];
 
 const DraftAssistant = () => {
-    const { getAuthHeaders } = useAuth();
+    const { authFetch } = useAuth();
     const allTemplates = TEMPLATE_GROUPS.flatMap(g => g.templates);
     const [activeTemplateId, setActiveTemplateId] = useState('bail');
     const currentTemplate = allTemplates.find(t => t.id === activeTemplateId);
@@ -86,9 +86,8 @@ const DraftAssistant = () => {
         setError('');
 
         try {
-            const response = await fetch('/api/documents/draft', {
+            const response = await authFetch('/api/documents/draft', {
                 method: 'POST',
-                headers: getAuthHeaders(),
                 body: JSON.stringify({
                     description: buildDescription(),
                     category: currentTemplate.category,

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
 
@@ -132,7 +132,7 @@ class SearchSource(BaseModel):
 class DraftRequest(BaseModel):
     description: str
     category: Optional[str] = None
-    n_results: Optional[int] = 5
+    n_results: Optional[int] = Field(default=5, ge=1, le=20)
 
 
 class DraftResponse(BaseModel):
@@ -171,12 +171,13 @@ class LiveCase(BaseModel):
 
 class CaseSearchRequest(BaseModel):
     query: str
-    n_results: Optional[int] = 5
+    n_results: Optional[int] = Field(default=5, ge=1, le=20)
 
 
 class CaseSearchResponse(BaseModel):
     query: str
     answer: str
+    ai_error: Optional[str] = None  # set when live cases are returned but AI synthesis failed
     sources: List[SearchSource]
     live_cases: List[LiveCase]
 
@@ -190,7 +191,7 @@ class KeywordSearchRequest(BaseModel):
 
 class LegalAidRequest(BaseModel):
     question: str
-    n_results: Optional[int] = 3
+    n_results: Optional[int] = Field(default=3, ge=1, le=20)
 
 
 class LegalAidResponse(BaseModel):
